@@ -1,0 +1,131 @@
+@baseUrl = http://localhost:5000/api
+
+### 1. Login as User A
+# @name loginA
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "test@example.com", "password": "password123" }
+
+### 2. Login as User B
+# @name loginB
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "second@example.com", "password": "password123" }
+
+### 3. A creates a workspace
+# @name ws
+POST {{baseUrl}}/workspaces
+Authorization: Bearer {{loginA.response.body.accessToken}}
+Content-Type: application/json
+
+{ "name": "Task Testing" }
+
+### 4. A adds B as MEMBER
+POST {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/members
+Authorization: Bearer {{loginA.response.body.accessToken}}
+Content-Type: application/json
+
+{ "email": "second@example.com", "role": "MEMBER" }
+
+### 5. A creates a project
+# @name project
+POST {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects
+Authorization: Bearer {{loginA.response.body.accessToken}}
+Content-Type: application/json
+
+{ "name": "Website" }
+
+### 6. A creates a task assigned to B → 201
+# @name task1
+POST {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks
+Authorization: Bearer {{loginA.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Build login page",
+  "description": "Email and password form",
+  "priority": "HIGH",
+  "dueDate": "2026-12-01",
+  "assigneeId": "{{loginB.response.body.user.id}}"
+}
+
+### 7. B creates a task → 201
+# @name task2
+POST {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks
+Authorization: Bearer {{loginB.response.body.accessToken}}
+Content-Type: application/json
+
+{ "title": "Write API docs" }
+
+### 8. Assign to a non-member → 400
+POST {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks
+Authorization: Bearer {{loginA.response.body.accessToken}}
+Content-Type: application/json
+
+{ "title": "Bad task", "assigneeId": "not-a-real-member" }
+
+### 9. List all tasks → 200 (2 tasks)
+GET {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks
+Authorization: Bearer {{loginA.response.body.accessToken}}
+
+### 10. Filter + search → 200 (only "Build login page")
+GET {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks?status=TODO&q=login
+Authorization: Bearer {{loginA.response.body.accessToken}}
+
+### 11. Get task 1 → 200
+GET {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}
+Authorization: Bearer {{loginA.response.body.accessToken}}
+
+### 12. Move task 1 to IN_PROGRESS (drag and drop) → 200
+PATCH {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}/move
+Authorization: Bearer {{loginB.response.body.accessToken}}
+Content-Type: application/json
+
+{ "status": "IN_PROGRESS", "position": 500 }
+
+### 13. Edit task 1: URGENT + unassign → 200 (assignee: null)
+PATCH {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}
+Authorization: Bearer {{loginA.response.body.accessToken}}
+Content-Type: application/json
+
+{ "priority": "URGENT", "assigneeId": null }
+
+### 14. B comments on task 1 → 201
+# @name comment
+POST {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}/comments
+Authorization: Bearer {{loginB.response.body.accessToken}}
+Content-Type: application/json
+
+{ "content": "I'll start on this today" }
+
+### 15. List comments → 200
+GET {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}/comments
+Authorization: Bearer {{loginA.response.body.accessToken}}
+
+### 16. A tries to edit B's comment → 403
+PATCH {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}/comments/{{comment.response.body.comment.id}}
+Authorization: Bearer {{loginA.response.body.accessToken}}
+Content-Type: application/json
+
+{ "content": "Hacked!" }
+
+### 17. B edits own comment → 200
+PATCH {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}/comments/{{comment.response.body.comment.id}}
+Authorization: Bearer {{loginB.response.body.accessToken}}
+Content-Type: application/json
+
+{ "content": "Started. Should be done by Friday" }
+
+### 18. B (MEMBER) tries to delete A's task → 403
+DELETE {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}
+Authorization: Bearer {{loginB.response.body.accessToken}}
+
+### 19. B deletes own task → 204
+DELETE {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task2.response.body.task.id}}
+Authorization: Bearer {{loginB.response.body.accessToken}}
+
+### 20. A (ADMIN) deletes task 1 → 204 (its comments go too)
+DELETE {{baseUrl}}/workspaces/{{ws.response.body.workspace.id}}/projects/{{project.response.body.project.id}}/tasks/{{task1.response.body.task.id}}
+Authorization: Bearer {{loginA.response.body.accessToken}}
