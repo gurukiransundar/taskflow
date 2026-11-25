@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AuthContext } from "./auth-context";
 import { refreshAccessToken } from "../api/axios";
 import { getMe, loginRequest, logoutRequest, registerRequest } from "../api/auth";
 import type { User } from "../types";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -25,10 +27,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(email: string, password: string) {
+    queryClient.clear(); // start fresh: no data from a previous user
     setUser(await loginRequest(email, password));
   }
 
   async function register(name: string, email: string, password: string) {
+    queryClient.clear();
     setUser(await registerRequest(name, email, password));
   }
 
@@ -36,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await logoutRequest();
     } finally {
+      queryClient.clear(); // forget all cached workspaces, projects, tasks
       setUser(null);
     }
   }
